@@ -14,11 +14,11 @@ jobs:
         uses: actions/checkout@v4
 
       # 先用 JDK 11（旧项目更兼容；若还不行再换 17）
-      - name: Set up JDK 11
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 11
+          java-version: 17
 
       # 一键装好 ANDROID_SDK_ROOT、sdkmanager 等
       - name: Set up Android SDK

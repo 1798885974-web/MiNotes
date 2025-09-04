@@ -69,7 +69,7 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - - name: List built APKs
+      - name: List built APKs
         run: |
           echo "Searching for APKs under */build/outputs/apk ..."
           find . -path "*/build/outputs/apk/*/*.apk" -print || true

@@ -1,4 +1,4 @@
-name: Build APK (Debug, Simple)
+name: Build APK (Debug, dual JDK)
 
 on:
   workflow_dispatch:
@@ -13,33 +13,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 先用 JDK 11（旧项目更兼容；若还不行再换 17）
+      # 1) 先用 JDK 17，给 sdkmanager 用（cmdline-tools 新版强制 JDK17）
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      # 一键装好 ANDROID_SDK_ROOT、sdkmanager 等
+      # 2) 配好 ANDROID_SDK_ROOT + 安装 sdkmanager
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # 安装常见的 platforms / build-tools（覆盖多数老项目）
+      # 3) 装常见的 platforms / build-tools（包含老版本，兼容老工程）
       - name: Install SDK components
         run: |
           yes | sdkmanager --licenses
           sdkmanager "platform-tools" \
-                     "platforms;android-34" "platforms;android-33" "platforms;android-30" \
-                     "build-tools;34.0.0" "build-tools;33.0.2" "build-tools;30.0.3"
+                     "platforms;android-28" "platforms;android-25" "platforms;android-23" \
+                     "build-tools;28.0.3" "build-tools;25.0.3" "build-tools;23.0.3"
 
+      # 4) 切换到 JDK 8 来跑 Gradle 3.3（关键！）
+      - name: Switch to JDK 8 for build
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 8
+
+      # 5) 赋权并构建 Debug APK
       - name: Make gradlew executable
         run: chmod +x gradlew
 
       - name: Build debug APK
         run: |
+          ./gradlew --version
           ./gradlew --no-daemon clean
           ./gradlew --no-daemon --stacktrace --info assembleDebug
 
+      # 6) 产物上传
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

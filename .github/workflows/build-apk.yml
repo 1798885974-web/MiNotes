@@ -1,4 +1,4 @@
-name: Build APK (Debug, dual JDK)
+name: Build APK (Debug, dual JDK + repo patch)
 
 on:
   workflow_dispatch:
@@ -13,33 +13,59 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 1) 先用 JDK 17，给 sdkmanager 用（cmdline-tools 新版强制 JDK17）
+      # 1) 用 JDK17 供 sdkmanager 使用
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      # 2) 配好 ANDROID_SDK_ROOT + 安装 sdkmanager
+      # 2) 安装 Android SDK / sdkmanager
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # 3) 装常见的 platforms / build-tools（包含老版本，兼容老工程）
+      # 3) 安装与老项目匹配的平台和 build-tools（可按需增减）
       - name: Install SDK components
         run: |
           yes | sdkmanager --licenses
-          sdkmanager "platform-tools" \
-                     "platforms;android-28" "platforms;android-25" "platforms;android-23" \
-                     "build-tools;28.0.3" "build-tools;25.0.3" "build-tools;23.0.3"
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-25" "platforms;android-23" "platforms;android-28" \
+            "build-tools;25.0.3" "build-tools;23.0.3" "build-tools;28.0.3"
 
-      # 4) 切换到 JDK 8 来跑 Gradle 3.3（关键！）
+      # 4) ★ 注入全局仓库（修复 jcenter 失效）
+      - name: Inject global repositories for old Gradle
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/repo.gradle <<'EOF'
+          allprojects { proj ->
+            // 给构建脚本本身加仓库（用来拉 AGP 2.x）
+            proj.buildscript {
+              repositories {
+                maven { url "https://dl.google.com/dl/android/maven2/" }
+                maven { url "https://maven.google.com" }
+                mavenCentral()
+                jcenter() // 作为兜底，如果项目显式要求
+              }
+            }
+            // 给项目依赖加仓库
+            proj.repositories {
+              maven { url "https://dl.google.com/dl/android/maven2/" }
+              maven { url "https://maven.google.com" }
+              mavenCentral()
+              jcenter()
+            }
+          }
+          EOF
+
+      # 5) 切回 JDK8 来跑 Gradle 3.3
       - name: Switch to JDK 8 for build
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 8
 
-      # 5) 赋权并构建 Debug APK
+      # 6) 构建 Debug APK
       - name: Make gradlew executable
         run: chmod +x gradlew
 
@@ -49,7 +75,7 @@ jobs:
           ./gradlew --no-daemon clean
           ./gradlew --no-daemon --stacktrace --info assembleDebug
 
-      # 6) 产物上传
+      # 7) 上传产物
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

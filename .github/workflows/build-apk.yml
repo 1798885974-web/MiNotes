@@ -1,4 +1,4 @@
-name: Build APK (Debug)
+name: Build APK (Debug, Robust)
 
 on:
   workflow_dispatch:
@@ -13,11 +13,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      # 先用 JDK 11（老项目常用），若仍失败我再给你 JDK 17 版
+      - name: Set up JDK 11
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 11
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -29,14 +30,38 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      # 安装 Android SDK 组件（覆盖常见 compileSdk / build-tools 需求）
+      - name: Install Android SDK components
+        run: |
+          sudo mkdir -p /usr/lib/android-sdk/cmdline-tools
+          sudo chown -R $USER:$USER /usr/lib/android-sdk
+          echo "ANDROID_SDK_ROOT=/usr/lib/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
+          echo "PATH=/usr/lib/android-sdk/platform-tools:/usr/lib/android-sdk/cmdline-tools/latest/bin:/usr/lib/android-sdk/emulator:$PATH" >> $GITHUB_ENV
+
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdtools.zip
+          mkdir -p /usr/lib/android-sdk/cmdline-tools/latest
+          unzip -q cmdtools.zip -d /usr/lib/android-sdk/cmdline-tools/latest
+          rm cmdtools.zip
+
+          yes | /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+
+          /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" "platforms;android-33" "platforms;android-30" \
+            "build-tools;34.0.0" "build-tools;33.0.2" "build-tools;30.0.3"
+
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      # 可选：先清理一次，避免历史缓存问题
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        run: |
+          ./gradlew --no-daemon clean
+          ./gradlew --no-daemon --stacktrace --info assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: MiNotes-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: '**/build/outputs/apk/debug/*.apk'
